@@ -10,10 +10,10 @@
 // =========================
 
 struct AccelSample {
-  int16_t x;
-  int16_t y;
-  int16_t z;
-  uint32_t timestampUs;
+  int16_t x = 0;
+  int16_t y = 0;
+  int16_t z = 0;
+  uint32_t timestampUs = 0;
 };
 
 struct AverageResult {
@@ -55,3 +55,4 @@ struct VibrationReport {
   float dominantFrequencyHz;
   float dominantAmplitudeRmsG;
 };
+

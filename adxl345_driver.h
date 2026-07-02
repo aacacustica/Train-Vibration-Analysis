@@ -14,6 +14,8 @@ class ADXL345Driver {
   // Devuelve true solamente cuando se ha leído una muestra nueva.
   bool readSampleIfReady(AccelSample &sample);
 
+  bool isReady() const;
+
   uint32_t getTotalOverruns() const;
 
   // Devuelve los overruns del intervalo y pone el contador a cero.
@@ -40,4 +42,5 @@ class ADXL345Driver {
 
   uint32_t intervalOverruns_ = 0;
   uint32_t totalOverruns_ = 0;
+  bool ready_ = false;
 };
