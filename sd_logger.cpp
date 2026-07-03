@@ -237,6 +237,7 @@ void SDLogger::listDirectory( const char *dirname, uint8_t levels){
   }
 
   root.close();
+  
 }
 
 bool initSDCard() {                                                                                                                           // Inicializa la SD. SD_CS. bus spiSD. Si falla devuelve false

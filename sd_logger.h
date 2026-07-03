@@ -2,7 +2,6 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <SD.h>
 
 #include "measurement_types.h"
 
