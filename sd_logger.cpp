@@ -262,7 +262,7 @@ void SDLogger::listDirectory( const char *dirname, uint8_t levels){
         Serial.print( file.name() );
 
         Serial.print( " SIZE: ");
-        Serial.print( file.size(); )
+        Serial.println( file.size(); )
       }
 
       file.close();

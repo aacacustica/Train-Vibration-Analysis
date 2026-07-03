@@ -1,5 +1,6 @@
+#include "average_accumulator.h"
+
 #include "config.h"
-#include "adxl345_driver.h"
 
 //========================
 // Transforma muestras en objeto AverageResult y reinicia acumuladores
@@ -42,5 +43,5 @@ void AverageAccumulator::reset() {
   accZ_ = 0;
 
   sampleCount_ = 0;
-  
+
 }

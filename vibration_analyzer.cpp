@@ -20,7 +20,7 @@ bool VibrationAnalyzer::begin() {
 
   sampleIndex_ = 0;
   firstSampleUs_ = 0;
-  lastSampleUs = 0;
+  lastSampleUs_ = 0;
   analysisId_ = 0;
 
   if (fftPlan_ != nullptr) {
@@ -141,7 +141,7 @@ AxisVibrationResult VibrationAnalyzer::analyzeAxis(const int16_t *samples, char 
     if (acG < minAcG){ minAcG = acG;}
     if (acG > maxAcG){ maxAcG = acG;}
 
-    const float absG = fabs(acG);
+    const float absG = fabsf(acG);
 
     if (absG > absolutePeakG){ absolutePeakG = absG;}
 
@@ -157,7 +157,7 @@ AxisVibrationResult VibrationAnalyzer::analyzeAxis(const int16_t *samples, char 
   // 3. FFT
   // ----------------------------------------------------------
 
-  fft_execute(fftPlan_),
+  fft_execute(fftPlan_);
 
   const float resolutionHz = effectiveSampleRateHz / Config::FFT_SIZE;
   
@@ -204,7 +204,7 @@ AxisVibrationResult VibrationAnalyzer::analyzeAxis(const int16_t *samples, char 
 
     const float denominator = left - 2.0f * center + right;
 
-    if(fabs(denominator) > 1.0e-12f){
+    if(fabsf(denominator) > 1.0e-12f){
       float delta = 0.5f * (left - right) / denominator;
 
       if(delta > 0.5f){delta = 0.5f;}

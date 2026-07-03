@@ -1,6 +1,5 @@
-
-#include <Arduino.h>
-#include <SPI.h>
+#include "adxl345_driver.h"
+#include "config.h"
 
 namespace{
     constexpr uint8_t REG_DEVID       = 0x00;                                                                                                // Identificador de dispositivo.
