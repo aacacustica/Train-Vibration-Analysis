@@ -1,63 +1,246 @@
-#pragma once
-
 #include <Arduino.h>
 #include "fft.h"
 
 #include "measurement_types.h"
 
-static const float TWO_PI_F = 6.28318530717958647692f;                                                                              // 2pi ,  para calcular la ventana Hann.
-static const float INV_SQRT_2_F = 0.70710678118654752440f;                                                                          // 1 / √2 ,  para comvertir amplitud de pico a amplitud RMS en una señal sinusoidal.
+
+namespace {
+  static const float TWO_PI_F = 6.28318530717958647692f;                                                                              // 2pi ,  para calcular la ventana Hann.
+  static const float INV_SQRT_2_F = 0.70710678118654752440f;                                                                          // 1 / √2 ,  para comvertir amplitud de pico a amplitud RMS en una señal sinusoidal.
+
+}
+
+VibrationAnalyzer::~VibrationAnalyzer(){
+  if(fftPlan_ !=nullptr){
+    fft_destroy(fftPlan_);
+    fftPlan_ = nullptr;
+  }
+}
 
 
-class VibrationAnalyzer {
- public:
-  bool begin();
+bool VibrationAnalyzer::begin() {
+  ready_ = false;
 
-  /*
-    Añade una muestra.
+  sampleIndex = 0;
+  firstSampleUs = 0;
+  lastSampleUs = 0;
+  analysisId_ = 0;
 
-    Devuelve true cuando se ha completado y analizado un bloque.
-    En ese caso, report contiene un resultado válido.
-  */
-  bool addSample(
-      const AccelSample &sample,
-      VibrationReport &report
-  );
+  if (fftPlan_ != nullptr) {
+    fft_destroy(fftPlan_);
+    fftPlan_ = nullptr;
+  }
 
- private:
-  void initializeHannWindow();
+  initializeHannWindow();
 
-  void analyzeBlock(
-      uint32_t timestampMs,
-      VibrationReport &report
-  );
+  fftPlan_ = fft_init(Config::FFT_SIZE,FFT_REAL,FFT_FORWARD,fftInput_,fftOutput_);
 
-  AxisVibrationResult analyzeAxis(
-      const int16_t *samples,
-      char axis,
-      float effectiveSampleRateHz
-  );
+  ready_ = fftPlan_ != nullptr;
 
-  float getBinAmplitudeRmsG(uint16_t bin) const;
+  return ready_;
+}
 
-  int16_t samplesX_[Config::FFT_SIZE];
-  int16_t samplesY_[Config::FFT_SIZE];
-  int16_t samplesZ_[Config::FFT_SIZE];
+bool VibrationAnalyzer::addSample(const AccelSample &sample, VibrationReport &report){
+  if (!ready_) {
+    return false;
+  }
+  if (sampleIndex_ == 0){
+    firstSampleUs_ = sample.timestampUs;
+  }
 
-  uint16_t sampleIndex_ = 0;
+  samplesX_[sampleIndex_] = sample.x;
+  samplesY_[sampleIndex_] = sample.y;
+  samplesZ_[sampleIndex_] = sample.z;
 
-  uint32_t firstSampleUs_ = 0;
-  uint32_t lastSampleUs_ = 0;
-  uint32_t analysisId_ = 0;
+  lastSampleUs_ = sample.timestampUs;
 
-  float fftInput_[Config::FFT_SIZE];
-  float fftOutput_[Config::FFT_SIZE];
+  sampleIndex_++;
 
-  float hannWindow_[Config::FFT_SIZE];
-  float hannWindowSum_ = 0.0f;
+  if(sampleIndex_ < Config:FFT_SIZE){ return false; }
 
-  fft_config_t *fftPlan_ = nullptr;
-};
+  analyzeBlock(millis(),report);
+
+  sampleIndex_ = 0;
+  
+  return true;
+}
+
+void VibrationAnalyzer::initializeHannWindow() {                                                                                                           
+  hannWindowSum = 0.0f;                                                                                                                       // Se reinicia la suma cada vez que se inicializa la ventana
+
+  for (uint16_t i = 0; i < FFT_SIZE; i++) {                                                                                                   // Se calculan 256 coeficientes:
+    const float phase = TWO_PI_F * static_cast<float>(i) / static_cast<float>(Config::FFT_SIZE - 1);                                                                                        // phase = [ 0 , 2pi ]
+    hannWindow[i] = 0.5f * (1.0f - cosf(phase));                                                                                              // coeficiente_hann_i = 0.5 * (1-cos(phase_i))
+    hannWindowSum += hannWindow[i];                                                                                                           // acumula la suma de los coeficientes. Utilizado posteriormente para compensar la atenuación de amplitud.
+  }
+}
+
+void VibrationAnalyzer::analyzeBlock(uint32_t timestampMs, VibrationReport &report){
+  report = VibrationReport{};                                                                                                                 // Limpiar restos de datos recibidos.
+  const uint32_t elapsedUs = lastSampleUs_ - firstSampleUs_;                                                                                  // Tiempo transcurrido entre primera y última muestra. Hay 256 muestras y 255 intervalos entre ellas.
+
+  float effectiveSampleRateHz = Config::NOMINAL_SAMPLE_RATE_HZ;                                                                               // Por eso effectiveSampleRateHz = (FFT_SIZE - 1) * 1000000.0f / elapsedUs; 
+  if (elapsedUs > 0) {                                                                                                                        // -> Fs = número de intervalos / tiempo. Se multiplica por 1M porque elapsed US está en ms.
+    effectiveSampleRateHz =
+        (Config::FFT_SIZE - 1) * 1000000.0f / static_cast<float>(elapsedUs);
+  }
+
+  const float resolutionHz = effectiveSampleRateHz / Config::FFT_SIZE;                                                                         // Resolución efectiva. Se recalcula con la frecuencia medida real. Si Fs efectiva = 99.88Hz entonces Δf = 99,88 / 256 ≈ 0,39016 Hz
+
+  report.timestampMs = timestampMs;
+  report.analysisId = ++analysisId_;
+  report.effectiveSampleRateHz = effectiveSampleRateHz;
+  report.resolutionHz = resolutionHz;
+  report.blockDurationSeconds = (Config::FFT_SIZE - 1) / effectiveSampleRateHz;
+  
+  report.x = analyzeAxis(samplesX_, 'X', effectiveSampleRateHz);
+  report.y = analyzeAxis(samplesY_, 'Y', effectiveSampleRateHz);
+  report.z = analyzeAxis(samplesZ_, 'Z', effectiveSampleRateHz);
+
+  const AxisVibrationResult *dominant = &report.x;
+
+  if(report.y.peakAmplitudeRmsG > dominant->peakAmplitudeRmsG){dominant = &report.y;}
+  if(report.z.peakAmplitudeRmsG > dominant->peakAmplitudeRmsG){dominant = &report.z;}
+
+  report.dominantAxis = dominant-> axis;
+  report.dominantFrequencyHz = dominant->peakFrequencyHz;
+  report.dominantAmplitudeRmsG = dominant->peakAmplitudeRmsG;
+}
+
+AxisVibrationResult VibrationAnalyzer::analyzeAxis(const int16_t *samples, char axis,float effectiveSampleRateHz){
+  AxisVibrationResult result;
+
+  result.axis = axis;
+
+  // ----------------------------------------------------------
+  // 1. Calcular la media: gravedad, inclinación y offset DC.
+  // ----------------------------------------------------------
+  double sumG = 0.0;
+  
+  for(uint16_t i = 0; i< Config:FFT_SIZE; i++){
+    sumG += swamples[i] * config::G_PER_LSB;
+  }
+
+  result.meanG = static_cast<float>(sumG / Config::FFT_SIZE);
+
+  // ----------------------------------------------------------
+  // 2. Métricas temporales y eliminación de DC
+  // ----------------------------------------------------------
+
+  double sumSquares = 0.0;
+
+  float minAcG = INFINITY;
+  float maxAcG = -INFINITY;
+  float absolutePeakG = 0.0f;
+
+  for(uint16_t i = 0; i < Config::FFT_SIZE; i++){
+    const float sampleG = samples[i] * Config::G_PER_LSB;
+    const float acG = sampleG - result.meanG
+    
+    sumSquares += static_cast<double>(acG) * acG:
+
+    if (acG < minAcG){ minAcG = acG;}
+    if (acG > maxAcG){ maxAcG = acG;}
+
+    const float absG = fabs(acG)
+
+    if (absG > absolutePeakG){ absolutePeakG = absG;}
+
+    fftInput[i] = acG * hannWindow_[i];
+
+  }
+
+  result.rmsG = sqrtf(static_cast<float>(sumSquares / Config::FFT_SIZE ));
+  result.peakToPeakG = maxAcG - minAcG;
+  result.crestFactor = result.rmsG > 0.0f ? absolutePeakG / result.rmsG : 0.0f;
+
+  // ----------------------------------------------------------
+  // 3. FFT
+  // ----------------------------------------------------------
+
+  fft_execute(fftPlan_)
+
+  const float resolutionHz = effectiveSampleRateHz / Config::FFT_SIZE;
+  
+  uint16_t firstBin = static_cast<uint16_t>(ceilf(Config::MIN_ANALYSIS_FREQ_HZ / resolutionHz));
+  uint16_t lastBin = static_cast<uint16_t>(floorf(Config::MAX_ANALYSIS_FREQ_HZ / resolutionHz));
+
+  if(firstBin < 1){firstBin = 1;}
+
+  const uint16_t highestRealBin = Config::FFT_SIZE / 2 - 1;
+
+  if(lastBin > highestRealBin){lastBin = highestRealBin;}
+  if(lastBin < firstBin){return result;}
+
+  // ----------------------------------------------------------
+  // 4. Buscar pico dominante
+  // ----------------------------------------------------------
+
+  uint16_t peakBin = firstBin;
+  
+  float peakAmplitudeRmsG = getBinAmplitudeRmsG(firstBin);
+
+  for(uint16_t bin = firstBin+1; bin <= lastBin; bin++){
+    
+    const float amplitudeRmsG = getBinAmplitudeRmsG(bin);
+
+    if(amplitudeRmsG > peakAmplitudeRmsG){
+      peakAmplitudeRmsG = amplitudeRmsG;
+      peakBin = bin;
+    }
+  }
+
+  // ----------------------------------------------------------
+  // 5. Interpolación parabólica
+  // ----------------------------------------------------------
+  
+  float interpolatedBin = peakBin;
+  float interpolatedAmplitudeRmsG = peakAmplitudeRmsG;
+
+  if(peakBin > firstBin && peakBin < lastBin){
+
+    const float left = getBinAmplitudeRmsG(peakBin - 1);
+    const float center = peakAmplitudeRmsG;
+    const float right = getBinAmplitudeRmsG(peakBin + 1);
+
+    const float denominator = left - 2.0f * center + right;
+
+    if(fabs(denominator) > 1.0e-12f){
+      float delta = 0.5f * (left - right) / denominator;
+
+      if(delta > 0.5f){delta = 0.5f}
+      else if (delta < -0.5f){delta = -0.5f;}
+
+      interpolatedBin = peakBin + delta;
+      interpolatedAmplitudeRmsG = center - 0.25f * (left - right) * delta;
+
+      if(interpolatedAmplitudeRmsG < 0.0f){interpolatedAmplitudeRmsG = 0.0f;}
+    }
+  }
+
+  result.peakFrequencyHz = interpolatedBin * resolutionHz;
+  result.peakAmplitudeRmsG = interpolatedAmplitudeRmsG;
+
+  return result;
+
+}
+
+float VibrationAnalyzer::getBinAmplitudeRmsG(uint16_t bin) const {
+
+    if ( bin == 0 || bin >= Config::FFT_SIZE / 2 || hannWindowSum_ <= 0.0f ){ return 0.0f }
+
+    const float realPart = fftOutput_[ 2 * bin ];
+    const float imagPart = fftOutput_[ 2 * bin + 1 ];
+    const float magnitude = hypotf( realPart , imagPart );
+
+    const float amplitudePeakG = 2.0f * magnitude / hannWindowSum_;
+
+    return ampltudePeakG * INV_SQRT_2_F;
+  
+}
+
+
+
 
 bool initFFT() {                                                                                                                               
   initHannWindow();                                                                                                                           // Primero se genera la ventana Hann
@@ -75,15 +258,7 @@ bool initFFT() {
   return fftPlan != nullptr;
 }
 
-void initHannWindow() {                                                                                                           
-  hannWindowSum = 0.0f;                                                                                                                       // Se reinicia la suma cada vez que se inicializa la ventana
 
-  for (uint16_t i = 0; i < FFT_SIZE; i++) {                                                                                                   // Se calculan 256 coeficientes:
-    const float phase = TWO_PI_F * i / (FFT_SIZE - 1);                                                                                        // phase = [ 0 , 2pi ]
-    hannWindow[i] = 0.5f * (1.0f - cosf(phase));                                                                                              // coeficiente_hann_i = 0.5 * (1-cos(phase_i))
-    hannWindowSum += hannWindow[i];                                                                                                           // acumula la suma de los coeficientes. Utilizado posteriormente para compensar la atenuación de amplitud.
-  }
-}
 
 void storeSample(int16_t x, int16_t y, int16_t z, uint32_t sampleTimeUs) {
   if (fftSampleIndex == 0) {
@@ -106,10 +281,8 @@ void storeSample(int16_t x, int16_t y, int16_t z, uint32_t sampleTimeUs) {
 // ============================================================
 // ANÁLISIS DE VIBRACIONES
 // ============================================================
-void analyzeFFTBlock(uint32_t timestampMs) {                                                                                                    // Función de análisis del bloque de 256 muestras X,Y,Z para la FFT
-  if (!fftOK) {                                                                                                                                 // Si la fft ha generado error. Finaliza
-    return;
-  }
+void VibrationAnalyzer::analyzeFFTBlock(uint32_t timestampMs,VibrationReport &report) {                                                         // Función de análisis del bloque de 256 muestras X,Y,Z para la FFT
+  report = VibrationReport{};
 
   const uint32_t elapsedUs = fftLastSampleUs - fftFirstSampleUs;                                                                                // Tiempo transcurrido entre primera y última muestra. Hay 256 muestras y 255 intervalos entre ellas.
                                                                                                                                                 // muestra 0 - intervalo - muestra 1 - intervalo - ... - muestra 255  -> 

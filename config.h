@@ -53,4 +53,29 @@ namespace Config {
     constexpr char AVERAGE_LOG_PATH[]   = "/adxl_average.csv";                                                                        // Archivo de guardado de: marca temporal, media X, media Y, media Z, número de muestras, overruns, heap libre                                              [Datos por segundo]
     constexpr char VIBRATION_LOG_PATH[] = "/vibration_fft.csv";                                                                       // Archivo de guardado de: Freq efectiva de muestreo, resolución, RMS, picos, factor cresta, freq. dominante, amplitud dominante, eje dominante, heap libre [Datos cada 2.56 segundos]
 
+    // ============================================================
+    // Validaciones de configuración
+    // ============================================================
+    
+    static_assert(
+        FFT_SIZE >= 4 &&
+            (FFT_SIZE & (FFT_SIZE - 1)) == 0,
+        "FFT_SIZE debe ser una potencia de dos y al menos 4"
+    );
+
+    static_assert(
+        MIN_ANALYSIS_FREQ_HZ >= 0.0f,
+        "MIN_ANALYSIS_FREQ_HZ no puede ser negativa"
+    );
+
+    static_assert(
+        MIN_ANALYSIS_FREQ_HZ <= MAX_ANALYSIS_FREQ_HZ,
+        "La frecuencia minima no puede superar la maxima"
+    );
+
+    static_assert(
+        MAX_ANALYSIS_FREQ_HZ <
+            NOMINAL_SAMPLE_RATE_HZ / 2.0f,
+        "MAX_ANALYSIS_FREQ_HZ debe ser menor que Nyquist"
+    );
 }

@@ -4,10 +4,9 @@
 
 class AverageAccumulator {
  public:
-  void addSample(const AccelSample &sample);
+  void addSample(const AccelSample &sample);   
 
-  bool hasSamples() const;
-
+  //Construye resultado del intervalo y reinicia acumuladores
   AverageResult takeResult(
       uint32_t timestampMs,
       uint32_t overruns

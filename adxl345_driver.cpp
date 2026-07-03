@@ -1,144 +1,346 @@
-#pragma once
 
 #include <Arduino.h>
 #include <SPI.h>
-#include <SD.h>
 
-static const uint8_t REG_DEVID       = 0x00;                                                                                                // Identificador de dispositivo.
-static const uint8_t REG_BW_RATE     = 0x2C;                                                                                                // Frecuencia de salida de datos.
-static const uint8_t REG_POWER_CTL   = 0x2D;                                                                                                // Estado de alimentación y el modo de medida.
-static const uint8_t REG_INT_SOURCE  = 0x30;                                                                                                // Indica qué eventos internos se han producido.
-static const uint8_t REG_DATA_FORMAT = 0x31;                                                                                                // Configura rango de medida resolución completa y justificación de los datos.
-static const uint8_t REG_DATAX0      = 0x32;                                                                                                // Dirección del primer byte de los datos de aceleración. A partir de ahí se encuentran seis bytes:
+constexpr uint8_t REG_DEVID       = 0x00;                                                                                                // Identificador de dispositivo.
+constexpr uint8_t REG_BW_RATE     = 0x2C;                                                                                                // Frecuencia de salida de datos.
+constexpr uint8_t REG_POWER_CTL   = 0x2D;                                                                                                // Estado de alimentación y el modo de medida.
+constexpr uint8_t REG_INT_SOURCE  = 0x30;                                                                                                // Indica qué eventos internos se han producido.
+constexpr uint8_t REG_DATA_FORMAT = 0x31;                                                                                                // Configura rango de medida resolución completa y justificación de los datos.
+constexpr uint8_t REG_DATAX0      = 0x32;                                                                                                // Dirección del primer byte de los datos de aceleración. A partir de ahí se encuentran seis bytes:
 
+constexpr uint8_t ADXL345_EXPECTED_ID = 0xE5;
 
+constexpr uint8_t MASK_DATA_READY = 0x80;
+constexpr uint8_t MASK_OVERRUN = 0x01;
 
-bool initADXL345() {                                                                                                                        
-  delay(100);                                                                                                                                // Estabilización después del arranque
+constexpr uint8_t POWER_CTL_MEASURE = 0x08;
 
-  digitalWrite(ADXL_CS, HIGH);                                                                                                               // Deseleccionar para permitir transferencia de datos en vez de entenderlos como comando/señal
-  digitalWrite(SD_CS, HIGH);    
+constexpr uint32_t DATA_READY_TIMEOUT_MS = 100UL;
 
-  const uint8_t deviceId = readRegister(REG_DEVID);                                                                                          // Lectura de registro REG_DEVID = 0x00
-  Serial.printf("ADXL345 DEVID: 0x%02X\n", deviceId);                                                                                        // Si no se obtiene ADXL345_EXPECTED_ID = 0xE5 se detiene la inicialización y se lanza error
+// =========================
+// Namespace
+// =========================
+
+ADXL345Driver::ADXL345Driver(
+    SPIClass &spi
+)
+    : spi_(spi) {
+}
+
+bool ADXL345Driver::begin() {
+  ready_ = false;
+  intervalOverruns_ = 0;
+  totalOverruns_ = 0;
+
+  pinMode(Config::ADXL_CS, OUTPUT);
+  digitalWrite(Config::ADXL_CS, HIGH);
+
+  delay(100);
+
+  const uint8_t deviceId =
+      readRegister(REG_DEVID);
+
+  Serial.printf(
+      "ADXL345 DEVID: 0x%02X\n",
+      static_cast<unsigned int>(deviceId)
+  );
 
   if (deviceId != ADXL345_EXPECTED_ID) {
     Serial.printf(
-        "ERROR: se esperaba DEVID 0x%02X y se obtuvo 0x%02X\n",
-        ADXL345_EXPECTED_ID,
-        deviceId
+        "ERROR: se esperaba DEVID 0x%02X"
+        " y se obtuvo 0x%02X\n",
+        static_cast<unsigned int>(
+            ADXL345_EXPECTED_ID
+        ),
+        static_cast<unsigned int>(
+            deviceId
+        )
     );
+
     return false;
   }
 
-  // Configurar antes de entrar en modo de medida.
-  writeRegister(REG_POWER_CTL, 0x00);                                                                                                         // Configuración antes de medir -> REG_POWER_CTL = 0x00 -> sensor fuera de modo de medida para configurar formato y frecuencia antes de tener activada la adquisición
-  writeRegister(REG_DATA_FORMAT, ADXL_DATA_FORMAT_VALUE);                                                                                     // REG_DATA_FORMAT = Resolución completa rango +-4g
-  writeRegister(REG_BW_RATE, ADXL_BW_RATE_VALUE);                                                                                             // REG_BW_RATE = 100Hz
-  writeRegister(REG_POWER_CTL, 0x08);  // Measure = 1.                                                                                        // Ahora sí, REG_POWER_CTL = 0x08 (1) -> empieza medición
+  // Configurar el sensor fuera del modo de medida.
+  writeRegister(
+      REG_POWER_CTL,
+      0x00
+  );
 
-  delay(20);                                                                                                                                  // Con 100Hz una muestra tarda aprox 10ms , delay = 20 permite que aparezcan 1/2 muestras
+  writeRegister(
+      REG_DATA_FORMAT,
+      Config::ADXL_DATA_FORMAT_VALUE
+  );
 
-  const uint8_t formatReadback = readRegister(REG_DATA_FORMAT);                                                                               // Se vuelven a leer los registros configurados. Por ahora solo para impresión. Esta re-lectura puede permitir comprobación antes de leer muestras.
-  const uint8_t rateReadback   = readRegister(REG_BW_RATE);
+  writeRegister(
+      REG_BW_RATE,
+      Config::ADXL_BW_RATE_VALUE
+  );
+
+  // Activar modo de medida.
+  writeRegister(
+      REG_POWER_CTL,
+      POWER_CTL_MEASURE
+  );
+
+  delay(20);
+
+  const uint8_t formatReadback =
+      readRegister(REG_DATA_FORMAT);
+
+  const uint8_t rateReadback =
+      readRegister(REG_BW_RATE);
 
   Serial.printf(
       "DATA_FORMAT=0x%02X, BW_RATE=0x%02X\n",
-      formatReadback,
-      rateReadback
+      static_cast<unsigned int>(
+          formatReadback
+      ),
+      static_cast<unsigned int>(
+          rateReadback
+      )
   );
 
-  int16_t testX;
-  int16_t testY;
-  int16_t testZ;
+  /*
+    En el código original estos registros se imprimían,
+    pero no se comprobaban. Aquí sí se valida que la
+    configuración escrita coincide con la leída.
+  */
+  if (
+      formatReadback !=
+          Config::ADXL_DATA_FORMAT_VALUE ||
+      rateReadback !=
+          Config::ADXL_BW_RATE_VALUE
+  ) {
+    Serial.println(
+        "ERROR: la configuracion escrita"
+        " no coincide con la leida"
+    );
 
-  // Esperar brevemente a que aparezca una muestra nueva.
-  const uint32_t timeoutStart = millis();                                                                                                      // Se guarda el tiempo de espera.
-  while ((readRegister(REG_INT_SOURCE) & MASK_DATA_READY) == 0) {                                                                              // Se continua esperando mientras no exista una muestra nueva.
-    if ((uint32_t)(millis() - timeoutStart) > 100) {                                                                                           // Si pasan mas de 100ms devuelve error. Con F=100Hz en ese tiempo se deberían generar 10 muestras
-      Serial.println("ERROR: timeout esperando DATA_READY");
-      return false;
-    }
-    delay(1);                                                                                                                                  // Evita consultar el registro a máxima velocidad durante inicialización
+    return false;
   }
 
-  if (!readADXLRaw(testX, testY, testZ)) {                                                                                                     // Lectura inicial de prueba, obtiene la primera muestra y enseña valores crudos y convertidos a g
-    return false;                                                                                                                              // g = testX/testY/testZ * G_PER_LSB
-  }                                                                                                                                            // Para comprobar validez de resultados, con el sensor quieto el vector total debería rondar 1g distribuido entre los ejes según orientación.
+  // Esperar una primera muestra.
+  const uint32_t timeoutStart = millis();
+
+  while (
+      (
+          readRegister(REG_INT_SOURCE) &
+          MASK_DATA_READY
+      ) == 0
+  ) {
+    if (
+        static_cast<uint32_t>(
+            millis() - timeoutStart
+        ) > DATA_READY_TIMEOUT_MS
+    ) {
+      Serial.println(
+          "ERROR: timeout esperando DATA_READY"
+      );
+
+      return false;
+    }
+
+    delay(1);
+  }
+
+  int16_t testX = 0;
+  int16_t testY = 0;
+  int16_t testZ = 0;
+
+  readRaw(
+      testX,
+      testY,
+      testZ
+  );
 
   Serial.printf(
-      "Lectura inicial: X=%d Y=%d Z=%d LSB | %.3f %.3f %.3f g\n",
+      "Lectura inicial:"
+      " X=%d Y=%d Z=%d LSB"
+      " | %.3f %.3f %.3f g\n",
       testX,
       testY,
       testZ,
-      testX * G_PER_LSB,
-      testY * G_PER_LSB,
-      testZ * G_PER_LSB
+      testX * Config::G_PER_LSB,
+      testY * Config::G_PER_LSB,
+      testZ * Config::G_PER_LSB
+  );
+
+  ready_ = true;
+  return true;
+}
+
+bool ADXL345Driver::readSampleIfReady(
+    AccelSample &sample
+) {
+  if (!ready_) {
+    return false;
+  }
+
+  const uint8_t interruptSource =
+      readRegister(REG_INT_SOURCE);
+
+  if (
+      (
+          interruptSource &
+          MASK_OVERRUN
+      ) != 0
+  ) {
+    intervalOverruns_++;
+    totalOverruns_++;
+  }
+
+  if (
+      (
+          interruptSource &
+          MASK_DATA_READY
+      ) == 0
+  ) {
+    return false;
+  }
+
+  sample.timestampUs = micros();
+
+  readRaw(
+      sample.x,
+      sample.y,
+      sample.z
   );
 
   return true;
 }
 
-bool readADXLRaw(int16_t &xOut, int16_t &yOut, int16_t &zOut) {                                                                                 //
-  uint8_t data[6];                                                                                                                              // Lectura de 6 bytes consecutivos
-  readRegisters(REG_DATAX0, sizeof(data), data);                                                                                                // Lee registros
-                                                                                                                                                // El sensor devuelve el byte bajo primero. Si data[0] = 0x34 y data[1] = 0x12 entonces data[1] << 8 = 0x1200 , 0x1200 | 0x34=0x1234
-  xOut = static_cast<int16_t>(                                                                                                                  // Static_cast<int16_t> interpreta el resultado como entero con signo
-      (static_cast<uint16_t>(data[1]) << 8) | data[0]
-  );
-
-  yOut = static_cast<int16_t>(
-      (static_cast<uint16_t>(data[3]) << 8) | data[2]
-  );
-
-  zOut = static_cast<int16_t>(
-      (static_cast<uint16_t>(data[5]) << 8) | data[4]
-  );
-
-  return true;
+uint32_t
+ADXL345Driver::getTotalOverruns() const {
+  return totalOverruns_;
 }
 
-void writeRegister(uint8_t reg, uint8_t value) {
-  digitalWrite(SD_CS, HIGH);
+uint32_t
+ADXL345Driver::takeIntervalOverruns() {
+  const uint32_t value =
+      intervalOverruns_;
 
-  spiADXL.beginTransaction(
-      SPISettings(ADXL_SPI_HZ, MSBFIRST, SPI_MODE3)
-  );
+  intervalOverruns_ = 0;
 
-  digitalWrite(ADXL_CS, LOW);
-  spiADXL.transfer(reg & 0x3F);
-  spiADXL.transfer(value);
-  digitalWrite(ADXL_CS, HIGH);
-
-  spiADXL.endTransaction();
+  return value;
 }
 
-uint8_t readRegister(uint8_t reg) {
+void ADXL345Driver::writeRegister(uint8_t reg, uint8_t value) {
+
+  spi_.beginTransaction(
+      SPISettings(Config::ADXL_SPI_HZ, MSBFIRST, SPI_MODE3)
+  );
+
+  digitalWrite(Config::ADXL_CS, LOW);
+    /*
+    Escritura de un registro:
+    bit 7 = 0
+    bit 6 = 0
+  */
+  spi_.transfer(reg & 0x3F);
+  spi_.transfer(value);
+
+  digitalWrite(Config::ADXL_CS, HIGH);
+
+  spi_.endTransaction();
+}
+
+uint8_t ADXL345Driver::readRegister(uint8_t reg) {
   uint8_t value = 0;
   readRegisters(reg, 1, &value);
   return value;
 }
 
-void readRegisters(uint8_t startReg, uint8_t numBytes, uint8_t *buffer) {
-  uint8_t address = startReg | 0x80;  // Lectura.
-
-  if (numBytes > 1) {
-    address |= 0x40;                  // Multibyte.
+void ADXL345Driver::readRegisters(
+    uint8_t startReg,
+    uint8_t numBytes,
+    uint8_t *buffer
+) {
+  if (
+      buffer == nullptr ||
+      numBytes == 0
+  ) {
+    return;
   }
 
-  digitalWrite(SD_CS, HIGH);
+  // Bit 7: lectura.
+  uint8_t address =
+      startReg | 0x80;
 
-  spiADXL.beginTransaction(
-      SPISettings(ADXL_SPI_HZ, MSBFIRST, SPI_MODE3)
+  // Bit 6: operación multibyte.
+  if (numBytes > 1) {
+    address |= 0x40;
+  }
+
+  spi_.beginTransaction(
+      SPISettings(
+          Config::ADXL_SPI_HZ,
+          MSBFIRST,
+          SPI_MODE3
+      )
   );
 
-  digitalWrite(ADXL_CS, LOW);
-  spiADXL.transfer(address);
+  digitalWrite(
+      Config::ADXL_CS,
+      LOW
+  );
 
-  for (uint8_t i = 0; i < numBytes; i++) {
-    buffer[i] = spiADXL.transfer(0x00);
+  spi_.transfer(address);
+
+  for (
+      uint8_t i = 0;
+      i < numBytes;
+      i++
+  ) {
+    buffer[i] =
+        spi_.transfer(0x00);
   }
 
-  digitalWrite(ADXL_CS, HIGH);
-  spiADXL.endTransaction();
+  digitalWrite(
+      Config::ADXL_CS,
+      HIGH
+  );
+
+  spi_.endTransaction();
+}
+
+void ADXL345Driver::readRaw(
+    int16_t &x,
+    int16_t &y,
+    int16_t &z
+) {
+  uint8_t data[6] = {};
+
+  readRegisters(
+      REG_DATAX0,
+      sizeof(data),
+      data
+  );
+
+  x = static_cast<int16_t>(
+      (
+          static_cast<uint16_t>(
+              data[1]
+          ) << 8
+      ) |
+      data[0]
+  );
+
+  y = static_cast<int16_t>(
+      (
+          static_cast<uint16_t>(
+              data[3]
+          ) << 8
+      ) |
+      data[2]
+  );
+
+  z = static_cast<int16_t>(
+      (
+          static_cast<uint16_t>(
+              data[5]
+          ) << 8
+      ) |
+      data[4]
+  );
 }

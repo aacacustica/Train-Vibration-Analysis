@@ -9,20 +9,29 @@ class ADXL345Driver {
  public:
   explicit ADXL345Driver(SPIClass &spi);
 
+  // Configura el sensor y comprueba su identidad.
   bool begin();
 
-  // Devuelve true solamente cuando se ha leído una muestra nueva.
+  /*
+    Devuelve true únicamente cuando había una muestra nueva
+    y esta ha sido copiada a sample.
+  */
   bool readSampleIfReady(AccelSample &sample);
 
-  bool isReady() const;
-
+  // Overruns acumulados desde el arranque.
   uint32_t getTotalOverruns() const;
 
-  // Devuelve los overruns del intervalo y pone el contador a cero.
+  /*
+    Devuelve los overruns del intervalo actual y reinicia
+    solamente el contador de intervalo.
+  */
   uint32_t takeIntervalOverruns();
 
  private:
-  void writeRegister(uint8_t reg, uint8_t value);
+  void writeRegister(
+      uint8_t reg,
+      uint8_t value
+  );
 
   uint8_t readRegister(uint8_t reg);
 
@@ -32,7 +41,7 @@ class ADXL345Driver {
       uint8_t *buffer
   );
 
-  bool readRaw(
+  void readRaw(
       int16_t &x,
       int16_t &y,
       int16_t &z
@@ -40,7 +49,8 @@ class ADXL345Driver {
 
   SPIClass &spi_;
 
+  bool ready_ = false;
+
   uint32_t intervalOverruns_ = 0;
   uint32_t totalOverruns_ = 0;
-  bool ready_ = false;
 };

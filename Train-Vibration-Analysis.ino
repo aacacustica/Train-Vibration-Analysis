@@ -9,33 +9,66 @@
 #include "vibration_analyzer.h"
 #include "sd_logger.h"
 
+// ============================================================
+// Buses
+// ============================================================
 SPIClass spiADXL(VSPI);
 SPIClass spiSD(HSPI);
 
+// ============================================================
+// Módulos
+// ============================================================
 ADXL345Driver sensor(spiADXL);
+
 AverageAccumulator averageAccumulator;
+
 VibrationAnalyzer vibrationAnalyzer;
+
 SDLogger logger(spiSD);
 
+// ============================================================
+// Estado del coordinador
+// ============================================================
 uint32_t lastAverageReportMs = 0;
 
+// ============================================================
+// Prototipos locales del sketch
+// ============================================================
 void printAverageResult(
     const AverageResult &result
 );
 
 void printVibrationReport(
-    const VibrationReport &report
+    const VibrationReport &report,
+    uint32_t totalOverruns
 );
 
+// ============================================================
+// SETUP
+// ============================================================
 void setup() {
   Serial.begin(115200);
+
   delay(1000);
 
   Serial.println();
+
   Serial.println(
-      "ESP32 + ADXL345 + analisis de vibraciones"
+      "================================================"
   );
 
+  Serial.println(
+      "ESP32 + ADXL345 + SD"
+      " + analisis de vibraciones"
+  );
+
+  Serial.println(
+      "================================================"
+  );
+
+  // ----------------------------------------------------------
+  // Inicializar los buses físicos
+  // ----------------------------------------------------------
   spiADXL.begin(
       Config::ADXL_SCK,
       Config::ADXL_MISO,
@@ -50,45 +83,95 @@ void setup() {
       Config::SD_CS
   );
 
-  if (!sensor.begin()) {
+  // ----------------------------------------------------------
+  // Sensor
+  // ----------------------------------------------------------
+  if (sensor.begin()) {
+    Serial.println(
+        "ADXL345 listo por VSPI"
+    );
+  } else {
     Serial.println(
         "ERROR inicializando ADXL345"
     );
   }
 
+  // ----------------------------------------------------------
+  // FFT
+  // ----------------------------------------------------------
   Serial.printf(
-      "Heap antes de FFT: %u\n",
+      "Heap antes de FFT:"
+      " %u bytes\n",
       ESP.getFreeHeap()
   );
 
-  if (!vibrationAnalyzer.begin()) {
+  if (vibrationAnalyzer.begin()) {
+    const float nominalResolution =
+        Config::NOMINAL_SAMPLE_RATE_HZ /
+        Config::FFT_SIZE;
+
+    const float nominalDuration =
+        Config::FFT_SIZE /
+        Config::NOMINAL_SAMPLE_RATE_HZ;
+
+    Serial.printf(
+        "FFT lista:"
+        " N=%u,"
+        " bloque=%.2f s,"
+        " resolucion nominal=%.4f Hz\n",
+        static_cast<unsigned int>(
+            Config::FFT_SIZE
+        ),
+        nominalDuration,
+        nominalResolution
+    );
+  } else {
     Serial.println(
         "ERROR inicializando FFT"
     );
   }
 
   Serial.printf(
-      "Heap despues de FFT: %u\n",
+      "Heap despues de FFT:"
+      " %u bytes\n",
       ESP.getFreeHeap()
   );
 
-  if (!logger.begin()) {
+  // ----------------------------------------------------------
+  // Tarjeta SD
+  // ----------------------------------------------------------
+  if (logger.begin()) {
+    logger.listRoot();
+  } else {
     Serial.println(
         "ERROR inicializando SD"
     );
-  } else {
-    logger.listRoot();
   }
 
-  lastAverageReportMs = millis();
+  lastAverageReportMs =
+      millis();
 }
 
+// ============================================================
+// LOOP
+// ============================================================
 void loop() {
   AccelSample sample;
 
-  if (sensor.readSampleIfReady(sample)) {
-    averageAccumulator.addSample(sample);
+  // ----------------------------------------------------------
+  // Adquisición
+  // ----------------------------------------------------------
+  if (
+      sensor.readSampleIfReady(
+          sample
+      )
+  ) {
+    // Camino 1: promedio.
+    averageAccumulator.addSample(
+        sample
+    );
 
+    // Camino 2: FFT.
     VibrationReport vibrationReport;
 
     if (
@@ -97,26 +180,47 @@ void loop() {
             vibrationReport
         )
     ) {
-      printVibrationReport(vibrationReport);
+      const uint32_t totalOverruns =
+          sensor.getTotalOverruns();
 
-      if (logger.isReady()) {
-        logger.appendVibration(
-            vibrationReport,
-            sensor.getTotalOverruns()
+      printVibrationReport(
+          vibrationReport,
+          totalOverruns
+      );
+
+      if (
+          logger.isReady() &&
+          !logger.appendVibration(
+              vibrationReport,
+              totalOverruns
+          )
+      ) {
+        Serial.println(
+            "Error escribiendo"
+            " vibration_fft.csv"
         );
       }
     }
   }
 
-  const uint32_t nowMs = millis();
+  // ----------------------------------------------------------
+  // Informe promedio periódico
+  // ----------------------------------------------------------
+  const uint32_t nowMs =
+      millis();
 
   if (
       static_cast<uint32_t>(
-          nowMs - lastAverageReportMs
-      ) >= Config::REPORT_PERIOD_MS
+          nowMs -
+          lastAverageReportMs
+      ) >=
+      Config::REPORT_PERIOD_MS
   ) {
     const uint32_t elapsedPeriods =
-        (nowMs - lastAverageReportMs) /
+        (
+            nowMs -
+            lastAverageReportMs
+        ) /
         Config::REPORT_PERIOD_MS;
 
     lastAverageReportMs +=
@@ -131,11 +235,145 @@ void loop() {
 
     printAverageResult(result);
 
-    if (logger.isReady()) {
-      logger.appendAverage(result);
+    if (
+        logger.isReady() &&
+        !logger.appendAverage(result)
+    ) {
+      Serial.println(
+          "Error escribiendo"
+          " adxl_average.csv"
+      );
     }
   }
 
   yield();
 }
 
+// ============================================================
+// SALIDA SERIE DEL PROMEDIO
+// ============================================================
+void printAverageResult(
+    const AverageResult &result
+) {
+  if (result.sampleCount == 0) {
+    Serial.printf(
+        "AVG t=%lu ms"
+        " | sin muestras"
+        " | overruns=%lu"
+        " | heap=%u\n",
+        static_cast<unsigned long>(
+            result.timestampMs
+        ),
+        static_cast<unsigned long>(
+            result.overruns
+        ),
+        ESP.getFreeHeap()
+    );
+
+    return;
+  }
+
+  Serial.printf(
+      "AVG t=%lu ms"
+      " | X=%+.4f g"
+      " Y=%+.4f g"
+      " Z=%+.4f g"
+      " | n=%lu"
+      " overruns=%lu"
+      " heap=%u\n",
+      static_cast<unsigned long>(
+          result.timestampMs
+      ),
+      result.xG,
+      result.yG,
+      result.zG,
+      static_cast<unsigned long>(
+          result.sampleCount
+      ),
+      static_cast<unsigned long>(
+          result.overruns
+      ),
+      ESP.getFreeHeap()
+  );
+}
+
+// ============================================================
+// SALIDA SERIE DE LA FFT
+// ============================================================
+void printVibrationReport(
+    const VibrationReport &report,
+    uint32_t totalOverruns
+) {
+  Serial.println();
+
+  Serial.printf(
+      "FFT #%lu"
+      " | Fs=%.3f Hz"
+      " | dF=%.4f Hz"
+      " | bloque=%.3f s\n",
+      static_cast<unsigned long>(
+          report.analysisId
+      ),
+      report.effectiveSampleRateHz,
+      report.resolutionHz,
+      report.blockDurationSeconds
+  );
+
+  Serial.printf(
+      "  X:"
+      " RMS=%.5f g"
+      "  P-P=%.5f g"
+      "  Cresta=%.2f"
+      "  Pico=%.3f Hz"
+      " @ %.5f g RMS\n",
+      report.x.rmsG,
+      report.x.peakToPeakG,
+      report.x.crestFactor,
+      report.x.peakFrequencyHz,
+      report.x.peakAmplitudeRmsG
+  );
+
+  Serial.printf(
+      "  Y:"
+      " RMS=%.5f g"
+      "  P-P=%.5f g"
+      "  Cresta=%.2f"
+      "  Pico=%.3f Hz"
+      " @ %.5f g RMS\n",
+      report.y.rmsG,
+      report.y.peakToPeakG,
+      report.y.crestFactor,
+      report.y.peakFrequencyHz,
+      report.y.peakAmplitudeRmsG
+  );
+
+  Serial.printf(
+      "  Z:"
+      " RMS=%.5f g"
+      "  P-P=%.5f g"
+      "  Cresta=%.2f"
+      "  Pico=%.3f Hz"
+      " @ %.5f g RMS\n",
+      report.z.rmsG,
+      report.z.peakToPeakG,
+      report.z.crestFactor,
+      report.z.peakFrequencyHz,
+      report.z.peakAmplitudeRmsG
+  );
+
+  Serial.printf(
+      "  DOMINANTE:"
+      " eje %c,"
+      " %.3f Hz,"
+      " %.5f g RMS"
+      " | overruns total=%lu"
+      " | heap=%u\n\n",
+      report.dominantAxis,
+      report.dominantFrequencyHz,
+      report.dominantAmplitudeRmsG,
+      static_cast<unsigned long>(
+          totalOverruns
+      ),
+      ESP.getFreeHeap()
+  );
+}
