@@ -65,9 +65,9 @@ bool VibrationAnalyzer::addSample(const AccelSample &sample, VibrationReport &re
 void VibrationAnalyzer::initializeHannWindow() {                                                                                                           
   hannWindowSum_ = 0.0f;                                                                                                                       // Se reinicia la suma cada vez que se inicializa la ventana
 
-  for (uint16_t i = 0; i < Config::FFT_SIZE; i++) {                                                                                                   // Se calculan 256 coeficientes:
-    const float phase = TWO_PI_F * static_cast<float>(i) / static_cast<float>(Config::FFT_SIZE - 1);                                                                                        // phase = [ 0 , 2pi ]
-    hannWindow_[i] = 0.5f * (1.0f - cosf(phase));                                                                                              // coeficiente_hann_i = 0.5 * (1-cos(phase_i))
+  for (uint16_t i = 0; i < Config::FFT_SIZE; i++) {                                                                                             // Se calculan 256 coeficientes:
+    const float phase = TWO_PI_F * static_cast<float>(i) / static_cast<float>(Config::FFT_SIZE - 1);                                            // phase = [ 0 , 2pi ]
+    hannWindow_[i] = 0.5f * (1.0f - cosf(phase));                                                                                               //  coeficiente_hann_i = 0.5 * (1-cos(phase_i))
     hannWindowSum_ += hannWindow_[i];                                                                                                           // acumula la suma de los coeficientes. Utilizado posteriormente para compensar la atenuación de amplitud.
   }
 }
@@ -131,10 +131,10 @@ AxisVibrationResult VibrationAnalyzer::analyzeAxis(const int16_t *samples, char 
   float absolutePeakG = 0.0f;
 
   for(uint16_t i = 0; i < Config::FFT_SIZE; i++){
-    const float sampleG = samples[i] * Config::G_PER_LSB;       //Conversión de LSB a G -> a_g​[n]=r[n]⋅K | r[n] es la lectura cruda y K = 0.0039g/LSB
-    const float acG = sampleG - result.meanG;                   // Eliminación de componente continua Media x = (1/N) * ​(n=0)(N-1)∑​x[n] -> señal centrada x_ac[n] = x[n] - x
-    
-    sumSquares += static_cast<double>(acG) * acG;               // x_RMS​= sqrt( (1/N) * (n=0)(N-1)∑x_ac[n]^2 )
+    const float sampleG = samples[i] * Config::G_PER_LSB;                                 //Conversión de LSB a G -> a_g​[n]=r[n]⋅K | r[n] es la lectura cruda y K = 0.0039g/LSB
+    const float acG = sampleG - result.meanG;                                             // Eliminación de componente continua Media x = (1/N) * ​(n=0)(N-1)∑​x[n] -> señal centrada x_ac[n] = x[n] - x
+
+    sumSquares += static_cast<double>(acG) * acG;                                         // x_RMS​= sqrt( (1/N) * (n=0)(N-1)∑x_ac[n]^2 )
 ​
 ​
 
@@ -150,8 +150,8 @@ AxisVibrationResult VibrationAnalyzer::analyzeAxis(const int16_t *samples, char 
   }
 
   result.rmsG = sqrtf(static_cast<float>(sumSquares / Config::FFT_SIZE ));
-  result.peakToPeakG = maxAcG - minAcG;
-  result.crestFactor = result.rmsG > 0.0f ? absolutePeakG / result.rmsG : 0.0f;
+  result.peakToPeakG = maxAcG - minAcG;                                                   // x_p-p = x_max - x_min -> exclusión total observada
+  result.crestFactor = result.rmsG > 0.0f ? absolutePeakG / result.rmsG : 0.0f;           // CF = max(abs(x_ac[n]))/x_rms
 
   // ----------------------------------------------------------
   // 3. FFT
@@ -230,9 +230,9 @@ float VibrationAnalyzer::getBinAmplitudeRmsG(uint16_t bin) const {
 
     const float realPart = fftOutput_[ 2 * bin ];
     const float imagPart = fftOutput_[ 2 * bin + 1 ];
-    const float magnitude = hypotf( realPart , imagPart );
+    const float magnitude = hypotf( realPart , imagPart );                                                            // |X[k]| = sqrt(parte_real(X[k])^2 + parte_imaginaria(X[k])^2)
 
-    const float amplitudePeakG = 2.0f * magnitude / hannWindowSum_;
+    const float amplitudePeakG = 2.0f * magnitude / hannWindowSum_;                                                   // A_pico = (2|X[k]|) / sum(w[n]) -> A_rms = A_pico / sqrt(2)
 
     return amplitudePeakG * INV_SQRT_2_F;
   
