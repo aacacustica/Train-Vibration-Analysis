@@ -6,32 +6,34 @@
 #include "config.h"
 #include "measurement_types.h"
 
+/*
+===================================================================================================================================================
+#  Analizador de vibraciones por bloques.                                                                                                         #
+#                                                                                                                                                 #
+#  El módulo:                                                                                                                                     #
+#  1. Reúne FFT_SIZE muestras sincronizadas de X, Y y Z.                                                                                          #
+#  2. Calcula la frecuencia de muestreo efectiva del bloque.                                                                                      #
+#  3. Elimina la media de cada eje.                                                                                                               #
+#  4. Obtiene métricas temporales.                                                                                                                #
+#  5. Aplica una ventana Hann.                                                                                                                    #
+#  6. Ejecuta una FFT por eje.                                                                                                                    #
+#  7. Busca el pico dominante dentro de la banda configurada.                                                                                     #
+#  8. Devuelve los resultados mediante VibrationReport.                                                                                           #
+#                                                                                                                                                 #
+#  No imprime resultados y no escribe en la tarjeta SD.                                                                                           #
+====================================================================================================================================================
+*/
+
+
 class VibrationAnalyzer {
  public:
   VibrationAnalyzer() = default;
-
   ~VibrationAnalyzer();
-
-  /*
-    El plan FFT contiene recursos internos, por lo que
-    no permitimos copiar el objeto.
-  */
-  VibrationAnalyzer(
-      const VibrationAnalyzer &
-  ) = delete;
-
-  VibrationAnalyzer &operator=(
-      const VibrationAnalyzer &
-  ) = delete;
+  VibrationAnalyzer( const VibrationAnalyzer & ) = delete;
+  VibrationAnalyzer &operator=( const VibrationAnalyzer & ) = delete;
 
   bool begin();
 
-  /*
-    Añade una muestra.
-
-    Devuelve true cuando se han reunido FFT_SIZE
-    muestras y report contiene un análisis nuevo.
-  */
   bool addSample(
       const AccelSample &sample,
       VibrationReport &report
@@ -51,22 +53,13 @@ class VibrationAnalyzer {
       float effectiveSampleRateHz
   );
 
-  float getBinAmplitudeRmsG(
-      uint16_t bin
-  ) const;
+  float getBinAmplitudeRmsG( uint16_t bin ) const;
 
-  // Muestras crudas.
-  int16_t samplesX_[
-      Config::FFT_SIZE
-  ] = {};
+  int16_t samplesX_[ Config::FFT_SIZE ] = {};
 
-  int16_t samplesY_[
-      Config::FFT_SIZE
-  ] = {};
+  int16_t samplesY_[ Config::FFT_SIZE ] = {};
 
-  int16_t samplesZ_[
-      Config::FFT_SIZE
-  ] = {};
+  int16_t samplesZ_[ Config::FFT_SIZE ] = {};
 
   uint16_t sampleIndex_ = 0;
 
@@ -74,18 +67,11 @@ class VibrationAnalyzer {
   uint32_t lastSampleUs_ = 0;
   uint32_t analysisId_ = 0;
 
-  // Buffers reutilizados por los tres ejes.
-  float fftInput_[
-      Config::FFT_SIZE
-  ] = {};
+  float fftInput_[ Config::FFT_SIZE ] = {};
 
-  float fftOutput_[
-      Config::FFT_SIZE
-  ] = {};
+  float fftOutput_[ Config::FFT_SIZE ] = {};
 
-  float hannWindow_[
-      Config::FFT_SIZE
-  ] = {};
+  float hannWindow_[ Config::FFT_SIZE ] = {};
 
   float hannWindowSum_ = 0.0f;
 

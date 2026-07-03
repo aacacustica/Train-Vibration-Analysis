@@ -2,8 +2,25 @@
 
 #include <Arduino.h>
 #include <SPI.h>
-
 #include "measurement_types.h"
+
+
+/*
+=============================================================================================================================
+#                                                                                                                           #
+#  Encapsula la persistencia en tarjeta SD.                                                                                 #                                        
+#                                                                                                                           #
+#  Responsabilidades:                                                                                                       #                    
+#  - Inicializar la tarjeta en el bus SPI recibido.                                                                         #                                                
+#  - Crear los CSV y sus cabeceras.                                                                                         #                                
+#  - Añadir resultados de promedio y vibración.                                                                             #                                            
+#  - Listar el contenido de la tarjeta para diagnóstico.                                                                    #                                                        
+#                                                                                                                           #
+#  No calcula promedios ni resultados FFT.                                                                                  #                                        
+#                                                                                                                           #
+=============================================================================================================================
+*/
+
 
 class SDLogger {
  public:

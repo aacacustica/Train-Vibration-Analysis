@@ -6,8 +6,12 @@ namespace Config {
 
     // =========================
     // Bus VSPI -> ADXL345 
-    // static -> variáble limitada a este archivo
-    // const  -> valor no cambiará durante la ejecución
+    // =========================
+
+    //  constexpr permite utilizar estos valores para:
+    //- Dimensionar arrays estáticos.
+    //- Comprobar configuraciones con static_assert.
+    //- Evitar variables modificables durante la ejecución.
     // =========================
     constexpr int ADXL_SCK  = 18;                                                                                                // Reloj SPI.
     constexpr int ADXL_MISO = 19;                                                                                                // Datos del ADXL345 hacia el ESP32.
@@ -26,17 +30,25 @@ namespace Config {
     // ADXL345
     // =========================
 
-    constexpr uint32_t ADXL_SPI_HZ = 5000000;
-    constexpr uint8_t ADXL_BW_RATE_VALUE = 0x0A; // 0x0A -> ODR 100 Hz, ancho de banda nominal 50 Hz
-    constexpr uint8_t ADXL_DATA_FORMAT_VALUE = 0x09;    // FULL_RES=1, justify=0, range=01 (+/-4 g) -> 0x09.
+    
+    // IMPORTANTE:
+    // ADXL_BW_RATE_VALUE y NOMINAL_SAMPLE_RATE_HZ deben representar
+    // la misma frecuencia.
+    //
+    // Si se cambia el registro BW_RATE, también debe actualizarse
+    // NOMINAL_SAMPLE_RATE_HZ.
+*/
+    constexpr uint32_t ADXL_SPI_HZ = 5000000UL;
+    constexpr uint8_t ADXL_BW_RATE_VALUE = 0x0A;                                                                                        // 0x0A -> ODR 100 Hz, ancho de banda nominal 50 Hz
+    constexpr uint8_t ADXL_DATA_FORMAT_VALUE = 0x09;                                                                                    // FULL_RES=1, justify=0, range=01 (+/-4 g) -> 0x09.
     constexpr float G_PER_LSB = 0.0039f;
-    constexpr float NOMINAL_SAMPLE_RATE_HZ = 100.0f;                                                                                   // Frecuencia de muestreo que se espera del sensor .
+    constexpr float NOMINAL_SAMPLE_RATE_HZ = 100.0f;                                                                                    // Frecuencia de muestreo que se espera del sensor .
 
     // =========================
     // Promedios
     // =========================
     
-    constexpr uint32_t REPORT_PERIOD_MS = 1000;                                                                                        // Cada segundo que se muestrea y se guarda el promedio.
+    constexpr uint32_t REPORT_PERIOD_MS = 1000UL;                                                                                       // Cada segundo que se muestrea y se guarda el promedio.
 
     // =========================
     // FFT
