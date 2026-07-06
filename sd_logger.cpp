@@ -43,7 +43,7 @@ bool SDLogger::begin(){
     return false;
   }
 
-  Serial.print("Tipo de tarjeta");
+  Serial.print("Tipo de tarjeta: ");
   if(cardType == CARD_MMC){ Serial.println("MMC"); }
   else if(cardType == CARD_SD){ Serial.println("SDSC"); }
   else if(cardType == CARD_SDHC){ Serial.println("SDHC"); }
@@ -51,7 +51,7 @@ bool SDLogger::begin(){
 
   const uint64_t cardSizeMb = SD.cardSize() / (1024ULL * 1024ULL);
 
-  Serial.printf("Tamaño SD: %llu MB\n", static_cast<unsigned long long>(cardSizeMb));
+  Serial.printf("Tamaño SD: %llu MiB\n", static_cast<unsigned long long>(cardSizeMb));
 
 const bool averageHeaderOK =
     ensureCSVHeader(
@@ -262,7 +262,7 @@ void SDLogger::listDirectory( const char *dirname, uint8_t levels){
         Serial.print( file.name() );
 
         Serial.print( " SIZE: ");
-        Serial.println( file.size(); )
+        Serial.println( file.size() );
       }
 
       file.close();

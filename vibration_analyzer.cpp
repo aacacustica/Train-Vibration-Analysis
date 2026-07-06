@@ -132,7 +132,7 @@ void VibrationAnalyzer::analyzeBlock(uint32_t timestampMs, VibrationReport &repo
   if(report.y.peakAmplitudeRmsG > dominant->peakAmplitudeRmsG){dominant = &report.y;}
   if(report.z.peakAmplitudeRmsG > dominant->peakAmplitudeRmsG){dominant = &report.z;}
 
-  report.dominantAxis = dominant-> axis;
+  report.dominantAxis = dominant->axis;
   report.dominantFrequencyHz = dominant->peakFrequencyHz;
   report.dominantAmplitudeRmsG = dominant->peakAmplitudeRmsG;
 }
@@ -142,7 +142,7 @@ void VibrationAnalyzer::analyzeBlock(uint32_t timestampMs, VibrationReport &repo
 #   1. Conversión de LSB a g y media                                                                                                                                                                                          #                                 
 #   2. Eliminación de componente continua.                                                                                                                                                                                    #                                       
 #   3. Métricas temporales.                                                                                                                                                                                                   #                       
-#   4. Aplicación de ventanas y STFT.                                                                                                                                                                                         #                                       
+#   4. Aplicación de ventanas y FFT.                                                                                                                                                                                          #                                       
 #   5. Selección e interpolación del pico.                                                                                                                                                                                    #                                       
 #                                                                                                                                                                                                                             # 
 #   Donde se utiliza:                                                                                                                                                                                                         #                 
@@ -155,7 +155,7 @@ void VibrationAnalyzer::analyzeBlock(uint32_t timestampMs, VibrationReport &repo
 #            P2P = max(x_ac) - min(x_ac)                                                                                                                                                                                      #                                   
 #            CF = max(abs(x_ac[n])) / RMS                                                                                                                                                                                     #                                     
 #    -  Aplicación de ventana y FFT ->                                                                                                                                                                                        #                                     
-#            Transformada discreta calculada por la STFT representa:                                                                                                                                                          #                                                               
+#            Transformada discreta calculada por la FFT representa:                                                                                                                                                           #                                                               
 #              x[k] = sum(x_windowed[n] * exp(-j*2*pi*k*n/N))                                                                                                                                                                 #                                                         
 #            Resolución:                                                                                                                                                                                                      #                   
 #              deltaF = FS / N                                                                                                                                                                                                #                         
