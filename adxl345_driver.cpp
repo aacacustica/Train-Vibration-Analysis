@@ -1,6 +1,11 @@
 #include "adxl345_driver.h"
 #include "config.h"
 
+
+// =========================
+// Namespace
+// =========================
+
 namespace{
     constexpr uint8_t REG_DEVID       = 0x00;                                                                                                // Identificador de dispositivo.
     constexpr uint8_t REG_BW_RATE     = 0x2C;                                                                                                // Frecuencia de salida de datos.
@@ -9,38 +14,33 @@ namespace{
     constexpr uint8_t REG_DATA_FORMAT = 0x31;                                                                                                // Configura rango de medida resolución completa y justificación de los datos.
     constexpr uint8_t REG_DATAX0      = 0x32;                                                                                                // Dirección del primer byte de los datos de aceleración. A partir de ahí se encuentran seis bytes:
 
-    constexpr uint8_t ADXL345_EXPECTED_ID = 0xE5;
+    constexpr uint8_t ADXL345_EXPECTED_ID = 0xE5;                                                                                            // Valor esperado en el registro DEVID. Sirve para verificar que el sensor responde correctamente.
 
-    constexpr uint8_t MASK_DATA_READY = 0x80;
-    constexpr uint8_t MASK_OVERRUN = 0x01;
+    constexpr uint8_t MASK_DATA_READY = 0x80;                                                                                                // Máscara para comprobar si el bit DATA_READY está activo en INT_SOURCE. Indica que hay una nueva muestra disponible en los registros DATAX0-DATAZ1.
+    constexpr uint8_t MASK_OVERRUN = 0x01;                                                                                                   // Máscara para comprobar si el bit OVERRUN está activo en INT_SOURCE. Indica que se ha producido un overrun, es decir, que una muestra anterior fue reemplazada antes de ser leída.
 
-    constexpr uint8_t POWER_CTL_MEASURE = 0x08;
+    constexpr uint8_t POWER_CTL_MEASURE = 0x08;                                                                                              // Bit que activa el modo de medida. Se escribe en POWER_CTL.
 
-    constexpr uint32_t DATA_READY_TIMEOUT_MS = 100UL;
+    constexpr uint32_t DATA_READY_TIMEOUT_MS = 100UL;                                                                                        // Tiempo máximo de espera para que el sensor indique que hay una muestra lista. Se utiliza en begin().
 }
-
-
-// =========================
-// Namespace
-// =========================
 
 ADXL345Driver::ADXL345Driver( SPIClass &spi ): spi_(spi) { }
 
 bool ADXL345Driver::begin() {
 
-/*
-    ===================================================================================================================================================
-    #  Inicialización del ADXL345:                                                                                                                    #
-    #                                                                                                                                                 #
-    #  1. Deselecciona el dispositivo y espera su estabilización.                                                                                     #
-    #  2. Lee DEVID y comprueba que el dispositivo responde como ADXL345.                                                                             #
-    #  3. Sale temporalmente del modo de medida.                                                                                                      #
-    #  4. Configura resolución completa, rango y frecuencia de salida.                                                                                #
-    #  5. Activa el modo de medida.                                                                                                                   #
-    #  6. Relee los registros para verificar la configuración.                                                                                        #
-    #  7. Espera DATA_READY con timeout.                                                                                                              #
-    #  8. Realiza una lectura inicial de diagnóstico.                                                                                                 #
-    ===================================================================================================================================================
+
+/*==================================================================================================================================================
+#  Inicialización del ADXL345:                                                                                                                    #
+#                                                                                                                                                 #
+#  1. Deselecciona el dispositivo y espera su estabilización.                                                                                     #
+#  2. Lee DEVID y comprueba que el dispositivo responde como ADXL345.                                                                             #
+#  3. Sale temporalmente del modo de medida.                                                                                                      #
+#  4. Configura resolución completa, rango y frecuencia de salida.                                                                                #
+#  5. Activa el modo de medida.                                                                                                                   #
+#  6. Relee los registros para verificar la configuración.                                                                                        #
+#  7. Espera DATA_READY con timeout.                                                                                                              #
+#  8. Realiza una lectura inicial de diagnóstico.                                                                                                 #
+#===================================================================================================================================================
 */
 
   ready_ = false;
@@ -97,22 +97,22 @@ bool ADXL345Driver::begin() {
   return true;
 }
 
-bool ADXL345Driver::readSampleIfReady( AccelSample &sample ) {
-
 /*
-    ===================================================================================================================================================
-    #  Adquisición sincronizada:                                                                                                                      #
-    #                                                                                                                                                 #
-    #  1. Lee INT_SOURCE.                                                                                                                             #
-    #  2. Si OVERRUN está activo, incrementa los contadores.                                                                                          #                            
-    #  3. Si DATA_READY no está activo, termina sin repetir la muestra.                                                                               #                                    
-    #  4. Guarda una marca temporal en microsegundos.                                                                                                 #                    
-    #  5. Lee los seis bytes de los tres ejes.                                                                                                        #            
-    #                                                                                                                                                 #
-    #  DATA_READY evita leer varias veces el mismo dato. OVERRUN indica                                                                               #                                    
-    #  que una muestra anterior fue reemplazada antes de ser leída.                                                                                   #                                
-    ===================================================================================================================================================
+#==============================================================================================================================================================================================================================    
+#  Adquisición sincronizada:                                                                                                                                                                                                  #
+#                                                                                                                                                                                                                             #
+#  1. Lee INT_SOURCE.                                                                                                                                                                                                         #
+#  2. Si OVERRUN está activo, incrementa los contadores.                                                                                                                                                                      #                            
+#  3. Si DATA_READY no está activo, termina sin repetir la muestra.                                                                                                                                                           #                                    
+#  4. Guarda una marca temporal en microsegundos.                                                                                                                                                                             #                    
+#  5. Lee los seis bytes de los tres ejes.                                                                                                                                                                                    #            
+#                                                                                                                                                                                                                             #
+#  DATA_READY evita leer varias veces el mismo dato. OVERRUN indica                                                                                                                                                           #                                    
+#  que una muestra anterior fue reemplazada antes de ser leída.                                                                                                                                                               #                                
+#==============================================================================================================================================================================================================================
 */
+
+bool ADXL345Driver::readSampleIfReady( AccelSample &sample ) {
 
   if (!ready_) { return false; }
 

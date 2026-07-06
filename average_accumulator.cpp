@@ -2,9 +2,16 @@
 
 #include "config.h"
 
-//========================
-// Transforma muestras en objeto AverageResult y reinicia acumuladores
-//========================
+/*
+==========================================================================
+#       Incorpora una muestra a las sumas del intervalo.                 #                                                       
+#                                                                        # 
+#   Utiliza:                                                             #           
+#    Sum_axis = sum(raw_axis[n])                                         #                               
+#                                                                        #   
+#   Cada llamada añade un término a la suma de su eje y aumenta N.       #                                                                 
+==========================================================================
+*/
 void AverageAccumulator::addSample( const AccelSample &sample ) {
 
   accX_ += sample.x;
@@ -14,7 +21,17 @@ void AverageAccumulator::addSample( const AccelSample &sample ) {
   sampleCount_++;
 
 }
-
+/*
+==========================================================================
+#       Calcula las medias, construye el resultado y reinicia el estado. #                                                      
+#                                                                        # 
+#   Utiliza:                                                             #           
+#    average_g = (S / N ) * K                                            #                               
+#                                                                        #   
+#   Realiza al final una conversión a coma flotante para                 #                                                                 
+#   para evitar convertir cada muestra individualmente.                  #    
+==========================================================================
+*/
 AverageResult AverageAccumulator::takeResult( uint32_t timestampMs, uint32_t overruns ) {
 
   AverageResult result;
@@ -36,6 +53,11 @@ AverageResult AverageAccumulator::takeResult( uint32_t timestampMs, uint32_t ove
   return result;
 }
 
+/*
+==========================================================================
+#       Pone a cero las sumas y reinicia el contador.                    #                                                      
+==========================================================================
+*/
 void AverageAccumulator::reset() {
 
   accX_ = 0;

@@ -36,9 +36,9 @@ class AverageAccumulator {
   void reset();
 
  private:
-  int64_t accX_ = 0;
-  int64_t accY_ = 0;
-  int64_t accZ_ = 0;
+  int64_t accX_ = 0;                                           // Suma de muestras crudas del eje X del ADXL345. Se acumula en int64_t para evitar desbordamiento con 256 muestras de 16 bits.
+  int64_t accY_ = 0;                                           // Suma de muestras crudas del eje Y del ADXL345. Se acumula en int64_t para evitar desbordamiento con 256 muestras de 16 bits.
+  int64_t accZ_ = 0;                                           // Suma de muestras crudas del eje Z del ADXL345. Se acumula en int64_t para evitar desbordamiento con 256 muestras de 16 bits.
 
-  uint32_t sampleCount_ = 0;
+  uint32_t sampleCount_ = 0;                                   // Número de muestras acumuladas en el intervalo. Se reinicia en takeResult() para que el siguiente promedio solo contenga las muestras del nuevo intervalo.
 };

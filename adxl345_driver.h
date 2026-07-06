@@ -7,21 +7,20 @@
 
 
 /*
-=============================================================================================================================
-  Driver SPI del ADXL345.
-
-  Responsabilidades:
-  - Configurar el sensor.
-  - Verificar su identificador.
-  - Consultar DATA_READY.
-  - Leer simultáneamente X, Y y Z.
-  - Contabilizar eventos OVERRUN.
-
-  El driver no calcula promedios, no ejecuta FFT y no accede
-  a la tarjeta SD.
-=============================================================================================================================
+#==============================================================================================================================================================================================================================
+#  Driver SPI del ADXL345.                                                                                                                                                                                                    #                          
+#                                                                                                                                                                                                                             #
+#  Responsabilidades:                                                                                                                                                                                                         #                    
+#  - Configurar el sensor.                                                                                                                                                                                                    #                          
+#  - Verificar su identificador.                                                                                                                                                                                              #                                
+#  - Consultar DATA_READY.                                                                                                                                                                                                    #                          
+#  - Leer simultáneamente X, Y y Z.                                                                                                                                                                                           #                                  
+#  - Contabilizar eventos OVERRUN.                                                                                                                                                                                            #                                  
+#                                                                                                                                                                                                                             #
+#  El driver no calcula promedios, no ejecuta FFT y no accede                                                                                                                                                                 #                                                            
+#  a la tarjeta SD.                                                                                                                                                                                                           #                  
+#==============================================================================================================================================================================================================================
 */
-
 
 class ADXL345Driver {
  public:
